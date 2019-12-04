@@ -1,0 +1,173 @@
+---
+title: "Homework 11"
+author: "Richard Fischer"
+date: "December 4, 2019"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+require(data.table)
+
+paydata <- as.data.frame(fread("State_Employee_Payroll_Data_Calendar_Year_2015_through_Present.tsv"))
+
+paydata <- subset(paydata, paydata$`Full/Part` == "F")
+attach(paydata)
+paydata$fullName <- paste(`First Name`, `Middle Initial`, `Last Name`, sep = '')
+
+df2 <- aggregate(`Bi-Weekly Comp Rate`, by = c(list(paydata$fullName),
+                                              list(`Pyrl Fiscal Yr`)),
+                                              median)
+colnames(df2) <- c('Name', "Year", "Amount")
+
+y2015 <- subset(df2, df2$Year == 2015)
+y2015 <- cbind(y2015$Name, as.numeric(y2015$Amount))
+colnames(y2015) <- c("Name", "2015")
+
+y2016 <- subset(df2, df2$Year == 2016)
+y2016 <- cbind(y2016$Name, as.numeric(y2016$Amount))
+colnames(y2016) <- c("Name", "2016")
+
+y2017 <- subset(df2, df2$Year == 2017)
+y2017 <- cbind(y2017$Name, as.numeric(y2017$Amount))
+colnames(y2017) <- c("Name", "2017")
+
+y2018 <- subset(df2, df2$Year == 2018)
+y2018 <- cbind(y2018$Name, as.numeric(y2018$Amount))
+colnames(y2018) <- c("Name", "2018")
+
+y2019 <- subset(df2, df2$Year == 2019)
+y2019 <- cbind(y2019$Name, as.numeric(y2019$Amount))
+colnames(y2019) <- c("Name", "2019")
+
+y2020 <- subset(df2, df2$Year == 2020)
+y2020 <- cbind(y2020$Name, as.numeric(y2020$Amount))
+colnames(y2020) <- c("Name", "2020")
+
+
+newdata <- merge(y2015, y2016, by.x = 'Name', by.y = 'Name', all.x = TRUE, all.y = TRUE)
+newdata <- merge(newdata, y2017, by.x = 'Name', by.y = 'Name', all.x = TRUE, all.y = TRUE)
+newdata <- merge(newdata, y2018, by.x = 'Name', by.y = 'Name', all.x = TRUE, all.y = TRUE)
+newdata <- merge(newdata, y2019, by.x = 'Name', by.y = 'Name', all.x = TRUE, all.y = TRUE)
+newdata <- merge(newdata, y2020, by.x = 'Name', by.y = 'Name', all.x = TRUE, all.y = TRUE)
+
+newdata[newdata == 0] <- NA
+
+newdata$`2015` <- as.numeric(newdata$`2015`)
+newdata$`2016` <- as.numeric(newdata$`2016`)
+newdata$`2017` <- as.numeric(newdata$`2017`)
+newdata$`2018` <- as.numeric(newdata$`2018`)
+newdata$`2019` <- as.numeric(newdata$`2019`)
+newdata$`2020` <- as.numeric(newdata$`2020`)
+
+
+newdata$raise2016 <- (newdata$`2016` - newdata$`2015`) / newdata$`2015`
+newdata$raise2017 <- (newdata$`2017` - newdata$`2016`) / newdata$`2016`
+newdata$raise2018 <- (newdata$`2018` - newdata$`2017`) / newdata$`2017`
+newdata$raise2019 <- (newdata$`2019` - newdata$`2018`) / newdata$`2018`
+newdata$raise2020 <- (newdata$`2020` - newdata$`2019`) / newdata$`2019`
+
+head(newdata)
+```
+
+For this dataset, I had to do a lot of data wrangling. First, I subsetted the data to only include full time, regular employees. Then, I concatenated the first, middle, and last name together to get a set of full names, and found the median bi-weekly payment for each person for each fiscal year. After that, I transformed this into a matrix with each row representing each person and each column representing the median bi-weekly payment for a year. Finally, I found the percentage difference between each column and the column to the left of it to calculate the percentage raise that each person received each year.
+
+```{r}
+newdata <- newdata[, c('Name', 'raise2016', 'raise2017', 'raise2018', 'raise2019', 'raise2020')]
+newdata <- data.table(newdata)
+raises <- melt.data.table(newdata, 
+                          id.vars = c("Name"), 
+                          measure.vars = c("raise2016", "raise2017", "raise2018", "raise2019", "raise2020"),
+                          na.rm = TRUE)
+
+ggplot(raises, aes(x=variable, y=value)) + 
+  geom_boxplot() +
+  scale_y_continuous(limits = quantile(raises$value, c(0.1, 0.9)))
+```
+
+The first figure I made is a boxplot of all of the raises by year. We see that 2016 had a lot of raises, but then the raises decreased to an all time low in 2018. Then, they came back up by 2020.
+
+```{r}
+ggplot(raises) +
+  geom_histogram(aes(value))
+```
+
+Here I wanted to look at the distribution of the raises. Because of some outliers, our scale is very off, so I changed the x limit for the chart.
+
+```{r}
+ggplot(raises) +
+  geom_histogram(aes(value)) +
+  xlim(-0.4, 0.8)
+```
+
+Here we see that a lot of people are getting small raises, and larger raises steadily become less common. Also, there are a lot of times when people are getting paid less than the year before.
+
+```{r}
+agedata <- aggregate(Age, by = c(list(paydata$fullName)),
+                                              min)
+colnames(agedata) <- c('Name', "Age")
+raisesbyAge <- merge(raises, agedata, by.x = "Name", by.y = "Name")
+
+raisesbyAge <- aggregate(raisesbyAge$value, by = c(list(raisesbyAge$Age)), median)
+raisesbyAge <- raisesbyAge[2:nrow(raisesbyAge), ]
+colnames(raisesbyAge) <- c("Age", "Median_Raise")
+
+ggplot(raisesbyAge, aes(x = Age, y = Median_Raise)) + 
+  geom_col()
+```
+
+Here I made a plot of the median raise for each age group. It appears that raises are larger for younger people.
+
+```{r}
+cor.test(raisesbyAge$Age, raisesbyAge$Median_Raise)
+```
+
+Here I wanted to confirm that there is a correlation between age and the size of the raise, so I did a correlation test. We can see that since our p-value is still relatively high, we cannot assume that there is a relationship between age and raise amounts.
+
+```{r}
+egdata <- aggregate(`Bi-Weekly Comp Rate`, by = c(list(paydata$fullName), list(`Ethnic Grp`)), median)
+colnames(egdata) <- c('Name', "Ethnic_Group", "Payment")
+raisesbyEG <- merge(raises, egdata, by.x = "Name", by.y = "Name")
+raisesbyEG <- aggregate(raisesbyEG$value, by = c(list(raisesbyEG$Ethnic_Group)), median)
+colnames(raisesbyEG) <- c("Ethnic_Group", "Median_Raise")
+
+ggplot(raisesbyEG, aes(x = Ethnic_Group, y = Median_Raise)) + 
+  geom_col()
+```
+
+Here we see the median raise percentage by ethnic group.
+
+```{r}
+genderdata <- aggregate(`Bi-Weekly Comp Rate`, by = c(list(paydata$fullName), list(Sex)), median)
+colnames(genderdata) <- c('Name', "Gender", "Payment")
+raisesbyGender <- merge(raises, genderdata, by.x = "Name", by.y = "Name")
+
+ggplot(raisesbyGender, aes(x=Gender, y=value)) + 
+  geom_boxplot() +
+  scale_y_continuous(limits = quantile(raisesbyGender$value, c(0.1, 0.9)))
+```
+
+Here I made a boxplot of the raise percentage by gender. By looking at this, it appears that there isn’t any difference in the size of the raise based on a person’s gender.
+
+```{r}
+summary(aov(raisesbyGender$value ~ raisesbyGender$Gender))
+```
+
+```{r}
+aggregate(raisesbyGender$value, by = c(list(raisesbyGender$Gender)), mean)
+```
+
+I tried to confirm this with an anova test, and we see that since our p-value is low, we can actually assume that there is a different mean raise percentage for different genders. I also calculated the sample mean for each gender group, and I found that the U category had a much higher mean. To compare only male and females, I decided to exclude the U category and do the test again.
+
+```{r}
+raisesbyGender <- subset(raisesbyGender, 
+                         raisesbyGender$Gender != "U")
+summary(aov(raisesbyGender$value ~ raisesbyGender$Gender))
+```
+
+When I did the test with just male vs female, I got a high p-value, so I concluded that there is no difference between the amount of raises that men get compared to women.
+
+
+
+
+
